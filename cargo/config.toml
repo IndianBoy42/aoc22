@@ -1,0 +1,21 @@
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = "fat"
+linker = "rust-lld.exe"
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.dev]
+linker = "rust-lld.exe"
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.test]
+linker = "rust-lld.exe"
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.bench]
+# panic = "abort"
+# codegen-units = 1
+# lto = "thin"
+linker = "rust-lld.exe"
+rustflags = ["-C", "target-cpu=native"]
