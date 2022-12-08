@@ -12,11 +12,10 @@
 #![feature(iter_partition_in_place)]
 #![feature(map_entry_replace)]
 #![feature(specialization)]
-#![feature(maybe_uninit_extra)]
 #![feature(maybe_uninit_uninit_array)]
+#![feature(iter_array_chunks)]
 #![feature(array_chunks)]
 #![feature(array_windows)]
-#![feature(bool_to_option)]
 #![feature(test)]
 #![feature(drain_filter)]
 #![feature(hash_drain_filter)]
@@ -40,8 +39,8 @@ pub mod day15;
 pub mod day16;
 pub mod day17;
 // pub mod day18;
-pub mod day22;
 pub mod day2;
+pub mod day22;
 pub mod day3;
 pub mod day4;
 pub mod day5;

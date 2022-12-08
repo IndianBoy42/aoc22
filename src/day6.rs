@@ -1,87 +1,80 @@
-use std::mem::size_of_val;
-
-use ndarray::{Array1, Array2, ArrayBase};
-
 use crate::utils::*;
 
-const NEWBORN: usize = 8;
-const REFRESH: usize = 6;
-
-fn solve_log(input: &str, days: usize) -> usize {
-    let fishes = input
-        .trim()
-        .split(',')
-        .map(str::parse::<u8>)
-        .map(Result::unwrap)
-        .fold(Array1::zeros(NEWBORN + 1), |mut acc, num| {
-            acc[num as usize] += 1;
-            acc
-        });
-
-    let steps = successors(Some(2), |x| Some(x * 2)).take_while(|&x| x <= days);
-    // TODO: can use nalgebra fixed size matrix/vector here
-    let first = ndarray::array![
-        [0, 1, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 1, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 1, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 1, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 1, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 1, 0, 0],
-        [1, 0, 0, 0, 0, 0, 0, 1, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 1],
-        [1, 0, 0, 0, 0, 0, 0, 0, 0]
-    ];
-    let mats = {
-        let mut mats = steps
-            .scan(first.clone(), |mat, _| {
-                *mat = mat.dot(mat);
-                Some(mat.clone())
-            })
-            .collect::<ArrayVec<_, 32>>();
-        mats.insert(0, first);
-        mats
-    };
-
-    let mat = (0..(size_of_val(&days) * 8))
-        .zip(mats)
-        .filter(|(bitn, _)| days & (1 << bitn) != 0)
-        .map(|(_, mat)| mat)
-        .fold1(|a, b| a.dot(&b))
-        .unwrap();
-
-    mat.dot(&fishes).sum()
+pub fn part1(input: &str) -> usize {
+    find_packet::<4>(input)
 }
-fn solve(input: &str, days: usize) -> usize {
-    let mut fishes = input
-        .trim()
-        .split(',')
-        .map(str::parse::<u8>)
-        .map(Result::unwrap)
-        .fold(ArrayVec::from([0; NEWBORN + 1]), |mut acc, num| {
-            acc[num as usize] += 1;
-            acc
-        });
 
-    for i in 0..days {
-        let new = fishes.remove(0);
-        fishes.push(new);
-        fishes[REFRESH] += new;
+fn find_packet<const N: usize>(input: &str) -> usize {
+    let mut input = input.as_bytes().array_windows::<N>();
+
+    // TODO: I don't like mutability
+    // STARTING HERE
+    let mut count = 0;
+    let mut skip = 0;
+    while let Some(w) = input.nth(skip) {
+        println!("{}", std::str::from_utf8(w).unwrap());
+        if let Some(sk) = w
+            .iter()
+            .enumerate()
+            .position(|(i, a)| w[i + 1..].iter().any(|b| a == b))
+        {
+            println!("{skip}");
+            count += sk + 1;
+            skip = sk;
+        } else {
+            break;
+        }
     }
 
-    fishes.into_iter().sum()
+    count + N
 }
-
-pub fn part1(input: &str) -> usize {
-    solve_log(input, 80)
+fn find_packet_simple<const N: usize>(input: &str) -> usize {
+    input
+        .as_bytes()
+        .array_windows::<N>()
+        .position(|window| {
+            // Return true if window has no repeated characters
+            window
+                .iter()
+                .enumerate()
+                .all(|(i, a)| window[i + 1..].iter().all(|b| a != b))
+        })
+        .unwrap()
+        + N
 }
 
 pub fn part2(input: &str) -> usize {
-    solve_log(input, 256)
+    find_packet::<14>(input)
 }
 
 #[test]
 fn test() {
     let input = read_input("input6.txt").unwrap();
-    assert_eq!(part1(&input), 350_917);
-    assert_eq!(part2(&input), 1_592_918_715_629);
+    assert_eq!(
+        part1("mjqjpqmgbljsphdztnvjfqwrcgsmlb"),
+        7,
+        "mjqjpqmgbljsphdztnvjfqwrcgsmlb"
+    );
+    assert_eq!(
+        part1("bvwbjplbgvbhsrlpgdmjqwftvncz"),
+        5,
+        "bvwbjplbgvbhsrlpgdmjqwftvncz"
+    );
+    assert_eq!(
+        part1("nppdvjthqldpwncqszvftbrmjlhg"),
+        6,
+        "nppdvjthqldpwncqszvftbrmjlhg"
+    );
+    assert_eq!(
+        part1("nznrnfrfntjfmvfwmzdfjlvtqnbhcprsg"),
+        10,
+        "nznrnfrfntjfmvfwmzdfjlvtqnbhcprsg"
+    );
+    assert_eq!(
+        part1("zcfzfwzzqfrljwzlrfnpqdbhtmscgvjw"),
+        11,
+        "zcfzfwzzqfrljwzlrfnpqdbhtmscgvjw"
+    );
+    assert_eq!(part1(&input), 1723);
+    assert_eq!(part2(&input), 3708);
 }
