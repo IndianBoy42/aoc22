@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 use std::iter::{FromIterator, TrustedLen};
+use std::ops::{Index, IndexMut};
 
 use arrayvec::ArrayVec;
 use itertools::{izip, Itertools};
@@ -38,6 +39,19 @@ impl<T: Default + std::cmp::PartialEq> Grid2D<T> {
     }
 }
 
+impl<T> Index<(usize, usize)> for Grid2D<T> {
+    type Output = T;
+
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
+        &self.arr[index]
+    }
+}
+impl<T> IndexMut<(usize, usize)> for Grid2D<T> {
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+        &mut self.arr[index]
+    }
+}
+
 impl<T> Grid2D<T> {
     pub fn len(&self) -> usize {
         self.arr.len()
@@ -62,7 +76,7 @@ impl<T> Grid2D<T> {
         (self.arr.nrows(), self.arr.ncols())
     }
     pub fn check(&self, (x, y): (usize, usize)) -> bool {
-        y < self.arr.nrows() && x < self.arr.ncols()
+        x < self.arr.nrows() && y < self.arr.ncols()
     }
 
     pub fn iter<I>(&self) -> impl Iterator<Item = ((I, I), &T)>

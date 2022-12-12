@@ -1,113 +1,124 @@
 use std::io::stdin;
+use std::{hash::Hash, iter};
 
-use crate::{searcher::BFSearcher, utils::*};
-fn push<'a, F>(
-    q: &mut Vec<(&'a str, &'a str)>,
-    adj: &HashMap<&'a str, FSet<&'a str>>,
-    from: &'a str,
-    filt: F,
-) where
-    F: for<'r> FnMut(&'r (&'a str, &'a str)) -> bool,
-{
-    q.extend(
-        adj.get(from)
-            .unwrap()
-            .iter()
-            .map(|&node| (from, node))
-            .filter(filt),
-    );
-}
+use arrayvec::ArrayVec;
 
-fn solver<'a, T>(
-    visited: &[&str],
-    adj: &HashMap<&'a str, FSet<&'a str>>,
-    from: &'a str,
-    filt: fn(&[&str], &str, T) -> Option<T>,
-    state: T,
-) -> usize
-where
-    T: Copy,
-{
-    if from == "end" {
-        println!("{}", visited.iter().join(","));
-        return 1;
+use crate::{
+    grid::{adj_neighbours_if, Grid2D},
+    searcher::{BFSearcher, DijSearcher},
+    utils::*,
+};
+
+#[derive(Debug, Copy, Clone)]
+struct Tile((usize, usize), usize);
+
+impl Hash for Tile {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
-    // dbg!(visited);
-    let mut visited = visited.to_vec();
-    visited.push(from);
-    adj.get(from)
-        .unwrap()
-        .iter()
-        .copied()
-        .filter_map(|node| filt(&visited, node, state).map(|t| (node, t)))
-        .map(|(node, state)| solver(&visited, adj, node, filt, state))
-        .sum()
 }
+impl PartialEq for Tile {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl Eq for Tile {}
 
-fn all_lower(node: &str) -> bool {
-    node.bytes().all(|c| c.is_ascii_lowercase())
+impl PartialOrd for Tile {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Tile {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.1.cmp(&other.1)
+    }
 }
 
 pub fn part1(input: &str) -> usize {
-    let adj = input
+    let start = input
         .lines()
-        .map(|line| line.split_once('-').unwrap())
-        .flat_map(|(l, r)| [(l, r), (r, l)])
-        .into_grouping_map()
-        .collect::<FSet<_>>();
+        .enumerate()
+        .find_map(|(row, line)| line.bytes().position(|b| b == b'S').map(|col| (row, col)))
+        .unwrap();
+    let end = input
+        .lines()
+        .enumerate()
+        .find_map(|(row, line)| line.bytes().position(|b| b == b'E').map(|col| (row, col)))
+        .unwrap();
+    let heights = input.lines().flat_map(|line| {
+        line.bytes().map(|b| match b {
+            // a to z are 0-25
+            b'a'..=b'z' => b,
+            b'S' => b'a',
+            b'E' => b'z',
+            _ => unreachable!(),
+        })
+    });
+    let shape = (input.lines().count(), input.lines().next().unwrap().len());
+    let grid = Grid2D::from_iter_w_shape(shape, heights);
 
-    solver(
-        &[],
-        &adj,
-        "start",
-        |visited, node, _| {
-            (if all_lower(node) {
-                visited.iter().all(|&x| x != node)
-            } else {
-                true
-            })
-            .then_some(())
-        },
-        (),
-    )
+    // let start = start.0 * shape.1 + start.1;
+    // let end = end.0 * shape.1 + end.1;
+    // let grid = heights.collect::<Vec<_>>();
+
+    BFSearcher::<_, FSet<_>, _>::new(Tile(end, 0), |&Tile(pos, v): &Tile| {
+        let curr_height = grid[pos];
+        adj_neighbours_if(pos, |&neighbor| {
+            grid.check(neighbor) && grid[neighbor] >= (curr_height - 1)
+        })
+        .into_iter()
+        .map(move |pos| Tile(pos, v + 1))
+    })
+    .check()
+    .find_map(|Tile(pos, v)| (pos == start).as_some(v))
+    .unwrap()
 }
 
 pub fn part2(input: &str) -> usize {
-    let mut adj = input
+    let start = input
         .lines()
-        .map(|line| line.split_once('-').unwrap())
-        .flat_map(|(l, r)| [(l, r), (r, l)])
-        .filter(|&(_, r)| r != "start")
-        .into_grouping_map()
-        .collect::<FSet<_>>();
-    adj.remove("end");
+        .enumerate()
+        .find_map(|(row, line)| line.bytes().position(|b| b == b'S').map(|col| (row, col)))
+        .unwrap();
+    let end = input
+        .lines()
+        .enumerate()
+        .find_map(|(row, line)| line.bytes().position(|b| b == b'E').map(|col| (row, col)))
+        .unwrap();
+    let heights = input.lines().flat_map(|line| {
+        line.bytes().map(|b| match b {
+            // a to z are 0-25
+            b'a'..=b'z' => b,
+            b'S' => b'a',
+            b'E' => b'z',
+            _ => unreachable!(),
+        })
+    });
+    let shape = (input.lines().count(), input.lines().next().unwrap().len());
+    let grid = Grid2D::from_iter_w_shape(shape, heights);
 
-    solver(
-        &[],
-        &adj,
-        "start",
-        |visited, node, already_repeated| {
-            if all_lower(node) {
-                let any = visited.iter().all(|&x| x != node);
-                if any {
-                    Some(already_repeated)
-                } else if already_repeated {
-                    None
-                } else {
-                    Some(true)
-                }
-            } else {
-                Some(already_repeated)
-            }
-        },
-        false,
-    )
+    // let start = start.0 * shape.1 + start.1;
+    // let end = end.0 * shape.1 + end.1;
+    // let grid = heights.collect::<Vec<_>>();
+
+    BFSearcher::<_, FSet<_>, _>::new(Tile(end, 0), |&Tile(pos, v): &Tile| {
+        let curr_height = grid[pos];
+        adj_neighbours_if(pos, |&neighbor| {
+            grid.check(neighbor) && grid[neighbor] >= (curr_height - 1)
+        })
+        .into_iter()
+        .map(move |pos| Tile(pos, v + 1))
+    })
+    .check()
+    .find_map(|Tile(pos, v)| (grid[pos] == b'a').as_some(v))
+    .unwrap()
 }
 
 #[test]
 fn test() {
     let input = read_input("input12.txt").unwrap();
     // let input = read_input("test.txt").unwrap();
-    assert_eq!(part2(&input), 133_621);
-    assert_eq!(part1(&input), 4378);
+    assert_eq!(part1(&input), 391);
+    assert_eq!(part2(&input), 386);
 }

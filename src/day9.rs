@@ -5,122 +5,109 @@ use crate::{
 };
 use lazysort::SortedBy;
 
-type MapGrid2D<T> = FMap<(u8, u8), T>;
-type Grid = Grid2D<u8>;
-// type Grid = MapGrid2D<u8>;
-
-fn parse(input: &str) -> Grid {
-    input
-        .lines()
-        .enumerate()
-        .flat_map(|(r, line)| {
-            line.bytes()
-                .enumerate()
-                .map(move |(c, cha)| ((r as _, c as _), cha - b'0'))
-        })
-        // .collect::<FMap<(usize, usize), _>>();
-        .collect::<Grid>()
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
 }
 
-fn minima(map: &Grid) -> impl Iterator<Item = ((usize, usize), u8)> + '_ {
-    map.iter()
-        .map(|((r, c), &num)| ((r, c), num))
-        .filter(|&((r, c), num)| {
-            let a = map.get(&(r + 1, c)).copied().unwrap_or(10);
-            let b = r
-                .checked_sub(1)
-                .and_then(|r| map.get(&(r, c)))
-                .copied()
-                .unwrap_or(10);
-            let d = c
-                .checked_sub(1)
-                .and_then(|c| map.get(&(r, c)))
-                .copied()
-                .unwrap_or(10);
-            let c = map.get(&(r, c + 1)).copied().unwrap_or(10);
-
-            (num < a) && (num < b) && (num < c) && (num < d)
-        })
+impl From<u8> for Direction {
+    fn from(value: u8) -> Self {
+        match value {
+            b'U' => Self::Up,
+            b'D' => Self::Down,
+            b'L' => Self::Left,
+            b'R' => Self::Right,
+            _ => unreachable!(),
+        }
+    }
 }
 
+fn apply((head, tail): ((i32, i32), (i32, i32)), dir: Direction) -> ((i32, i32), (i32, i32)) {
+    let head = incr(dir, head);
+    let tail = follow(head, tail);
+
+    (head, tail)
+}
+
+fn incr(dir: Direction, head: (i32, i32)) -> (i32, i32) {
+    match dir {
+        Direction::Up => (head.0, head.1 - 1),
+        Direction::Down => (head.0, head.1 + 1),
+        Direction::Left => (head.0 - 1, head.1),
+        Direction::Right => (head.0 + 1, head.1),
+    }
+}
+
+fn follow(head: (i32, i32), tail: (i32, i32)) -> (i32, i32) {
+    // 25-1 possible positions of the head relative to the tail: (-2, -1, 0, 1, 2) x (-2, -1, 0, 1, 2)
+    // The tail moves to be within 1 step of the head
+    match (head.0 - tail.0, head.1 - tail.1) {
+        (0 | 1 | -1, 0 | 1 | -1) => tail,
+        // (0, y) => (tail.0, tail.1 + y.signum()),
+        // (x, 0) => (tail.0 + x.signum(), tail.1),
+        (x, y) => (tail.0 + x.signum(), tail.1 + y.signum()),
+    }
+}
+
+const START: (i32, i32) = (0, 0);
 pub fn part1(input: &str) -> usize {
-    let map = parse(input);
+    let visited = parse(input)
+        .scan([START, START], |[head, tail], d| {
+            *head = incr(d, *head);
+            *tail = follow(*head, *tail);
+            Some(*tail)
+        })
+        .collect::<FSet<_>>();
 
-    minima(&map).map(|(_, num)| 1 + num as usize).sum::<usize>()
+    visited.len()
 }
 
 pub fn part2(input: &str) -> usize {
-    let map = parse(input);
+    let visited = parse(input)
+        .scan([START; 10], |snake, d| {
+            {
+                let (head, tail) = snake.split_first_mut().unwrap();
+                *head = incr(d, *head);
+                tail.iter_mut().fold(*head, |prev, next| {
+                    *next = follow(prev, *next);
+                    *next
+                });
+            }
+            Some(*snake.last().unwrap())
+        })
+        .collect::<FSet<_>>();
 
-    if false {
-        let basin_sizes = map
-            .iter()
-            .map(|((r, c), &num)| ((r, c), num))
-            .filter(|&(_, num)| num != 9)
-            .scan(
-                DFSearcher::<(u8, u8), FSet<(u8, u8)>, _>::new_empty(|p: &(u8, u8)| {
-                    adj_neighbours_if(*p, |&(r, c)| {
-                        map.get(&(r as _, c as _)).map_or(false, |&h| h != 9)
-                    })
-                }),
-                |st, ((r, c), num)| {
-                    if st.push((r, c)) {
-                        let mut i = 0;
-                        for _ in st.by_ref() {
-                            i += 1;
-                        }
-                        Some(i)
-                    } else {
-                        Some(0)
-                    }
-                },
+    visited.len()
+}
+
+fn parse(input: &str) -> impl Iterator<Item = Direction> + '_ {
+    input
+        .lines()
+        .map(|line| {
+            (
+                line.as_bytes()[0].into(),
+                line.split_at(2).1.parse().unwrap(),
             )
-            .filter(|&x| x > 0);
-
-        if true {
-            let mut points: Vec<_> = basin_sizes.collect();
-            points.sort_unstable_by(|a, b| b.cmp(a));
-            points[..3].iter().product()
-        } else {
-            lazysort::SortedBy::sorted_by(basin_sizes, |a, b| b.cmp(a))
-                .take(3)
-                .product()
-        }
-    } else {
-        // TODO: watershed algorithm, no minima needed
-        let points = minima(&map).collect_vec();
-
-        let basin_sizes = points.into_par_iter().map(|((row, col), _)| {
-            DFSearcher::<(u8, u8), FSet<(u8, u8)>, _>::with_capacity(
-                map.len(),
-                (row as u8, col as u8),
-                |p: &(u8, u8)| {
-                    adj_neighbours_if(*p, |&(r, c)| {
-                        map.get(&(r as _, c as _)).map_or(false, |&h| h != 9)
-                    })
-                },
-            )
-            .check()
-            .count()
-        });
-
-        if true {
-            let mut points: Vec<_> = basin_sizes.collect();
-            points.sort_unstable_by(|a, b| b.cmp(a));
-            points[..3].iter().product()
-        } else {
-            // lazysort::SortedBy::sorted_by(basin_sizes, |a, b| b.cmp(a))
-            //     .take(3)
-            //     .product()
-            unimplemented!()
-        }
-    }
+        })
+        .flat_map(|(d, n)| (0..n).map(move |_| d))
 }
 
 #[test]
 fn test() {
     let input = read_input("input9.txt").unwrap();
-    // let input = read_input("test.txt").unwrap();
-    assert_eq!(part1(&input), 528);
-    assert_eq!(part2(&input), 920_448);
+
+    assert_eq!(part1(&input), 5930);
+
+    let test = "R 5
+U 8
+L 8
+D 3
+R 17
+D 10
+L 25
+U 20";
+    assert_eq!(part2(&input), 0);
 }

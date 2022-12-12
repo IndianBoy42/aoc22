@@ -144,6 +144,7 @@ pub type BFSearcher<T, V, SF> = Searcher<T, VecDeque<T>, V, SF>;
 pub type BFSearcherInt<SF> = Searcher<usize, VecDeque<usize>, BitSet, SF>;
 pub type DijSearcher<T, V, SF> = Searcher<T, BinaryHeap<Reverse<T>>, V, SF>;
 pub type DijSearcherInt<SF> = Searcher<usize, BinaryHeap<Reverse<usize>>, BitSet, SF>;
+// TODO: Implement A star search
 
 impl<T, Queue, VisitSet, NeighboursFn /* , SearchIter */> Searcher<T, Queue, VisitSet, NeighboursFn>
 where
@@ -211,6 +212,7 @@ where
     }
 
     /// Just to get a better error message for the type of `NeighboursFn`
+    #[must_use]
     pub fn check<SearchIter>(self) -> Self
     where
         NeighboursFn: FnMut(&T) -> SearchIter,
